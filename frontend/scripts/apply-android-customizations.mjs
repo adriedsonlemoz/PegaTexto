@@ -1,4 +1,4 @@
-import { cp, readFile, writeFile, access } from 'node:fs/promises'
+import { access, cp, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -17,7 +17,14 @@ try {
   throw new Error('Projeto Android não encontrado. Rode `npx cap add android` antes de aplicar a personalização.')
 }
 
+// O template do Capacitor cria recursos padrão com os mesmos nomes lógicos
+// usados pelo branding. Android considera splash.png + splash.xml no mesmo
+// diretório como o mesmo recurso @drawable/splash, e o mesmo vale para a cor
+// ic_launcher_background declarada em dois XMLs. Removemos apenas os padrões
+// conflitantes antes de copiar a identidade visual do app.
+await removeGeneratedResourceConflicts()
 await cp(brandingSource, brandingTarget, { recursive: true, force: true })
+await validateBrandingResources()
 
 let gradle = await readFile(buildGradle, 'utf8')
 const versionName = packageJson.version || '1.0.0'
@@ -32,7 +39,45 @@ if (!gradle.includes(signingApply)) {
 }
 
 await writeFile(buildGradle, gradle)
-console.log(`Android personalizado: ícone/splash aplicados, versão ${versionName} (${versionCode}).`)
+console.log(`Android personalizado: recursos sem duplicação, ícone/splash aplicados, versão ${versionName} (${versionCode}).`)
+
+async function removeGeneratedResourceConflicts() {
+  const conflictingFiles = [
+    path.join(brandingTarget, 'drawable', 'splash.png'),
+    path.join(brandingTarget, 'drawable', 'splash.webp'),
+    path.join(brandingTarget, 'drawable', 'splash.jpg'),
+    path.join(brandingTarget, 'drawable', 'splash.jpeg'),
+    path.join(brandingTarget, 'values', 'ic_launcher_background.xml'),
+  ]
+
+  await Promise.all(conflictingFiles.map((file) => rm(file, { force: true })))
+}
+
+async function validateBrandingResources() {
+  const splashXml = path.join(brandingTarget, 'drawable', 'splash.xml')
+  const splashAlternatives = ['png', 'webp', 'jpg', 'jpeg'].map((extension) =>
+    path.join(brandingTarget, 'drawable', `splash.${extension}`),
+  )
+
+  await access(splashXml)
+
+  for (const file of splashAlternatives) {
+    try {
+      await access(file)
+      throw new Error(`Recurso Android duplicado detectado: ${path.basename(splashXml)} e ${path.basename(file)}`)
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+  }
+
+  const legacyLauncherColor = path.join(brandingTarget, 'values', 'ic_launcher_background.xml')
+  try {
+    await access(legacyLauncherColor)
+    throw new Error('Recurso Android duplicado detectado: ic_launcher_background ainda existe em arquivo separado.')
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+}
 
 function versionToCode(version) {
   const [major = 0, minor = 0, patch = 0] = String(version)

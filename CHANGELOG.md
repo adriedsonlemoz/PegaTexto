@@ -20,3 +20,11 @@
 - sincroniza `versionName` e `versionCode` com `frontend/package.json`;
 - adiciona workflow de APK/AAB release assinados com GitHub Secrets;
 - adiciona checksums SHA-256 dos releases.
+
+## 1.2.2
+
+- Corrige falha `:app:mergeDebugResources` causada por recursos Android duplicados no branding.
+- Remove o `splash.png` padrão antes de aplicar `splash.xml` personalizado.
+- Remove a definição padrão duplicada de `ic_launcher_background` antes de aplicar as cores do app.
+- Adiciona validação preventiva de conflitos de recursos antes do Gradle.
+- Atualiza as actions do GitHub para runtimes Node 24 atuais.

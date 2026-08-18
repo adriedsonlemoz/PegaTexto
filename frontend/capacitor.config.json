@@ -1,0 +1,8 @@
+{
+  "appId": "com.adriedson.pegatexto",
+  "appName": "Pega Texto",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}

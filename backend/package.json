@@ -1,0 +1,22 @@
+{
+  "name": "pega-texto-backend",
+  "type": "module",
+  "version": "1.1.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "jsdom": "^24.1.0",
+    "@mozilla/readability": "^0.5.0",
+    "cheerio": "^1.0.0-rc.12",
+    "marked": "^13.0.2",
+    "node-cache": "^5.1.2"
+  }
+}

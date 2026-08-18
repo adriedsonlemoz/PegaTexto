@@ -1,0 +1,115 @@
+name: Android Signed Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || (echo "Secret ANDROID_KEYSTORE_BASE64 ausente" && exit 1)
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || (echo "Secret ANDROID_KEYSTORE_PASSWORD ausente" && exit 1)
+          test -n "$ANDROID_KEY_ALIAS" || (echo "Secret ANDROID_KEY_ALIAS ausente" && exit 1)
+          test -n "$ANDROID_KEY_PASSWORD" || (echo "Secret ANDROID_KEY_PASSWORD ausente" && exit 1)
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android API 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Test frontend core
+        working-directory: frontend
+        run: npm test
+
+      - name: Build web app
+        working-directory: frontend
+        run: npm run build
+
+      - name: Validate Capacitor config
+        working-directory: frontend
+        run: |
+          node -e "const c=require('./capacitor.config.json'); if (!c.appId || !c.appName || !c.webDir) { throw new Error('capacitor.config.json incompleto') } console.log('Capacitor config OK:', c.appId)"
+
+      - name: Create Android project
+        working-directory: frontend
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+
+      - name: Sync Capacitor
+        working-directory: frontend
+        run: npx cap sync android
+
+      - name: Apply Android branding and signing hook
+        working-directory: frontend
+        run: npm run android:brand
+
+      - name: Restore release keystore
+        working-directory: frontend
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/release.keystore
+          chmod 600 android/app/release.keystore
+
+      - name: Build signed APK and AAB
+        working-directory: frontend/android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/frontend/android/app/release.keystore
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease bundleRelease
+
+      - name: Generate SHA-256 checksums
+        working-directory: frontend/android/app/build/outputs
+        run: |
+          sha256sum apk/release/app-release.apk > apk/release/app-release.apk.sha256
+          sha256sum bundle/release/app-release.aab > bundle/release/app-release.aab.sha256
+
+      - name: Upload signed release
+        uses: actions/upload-artifact@v4
+        with:
+          name: pega-texto-signed-release
+          path: |
+            frontend/android/app/build/outputs/apk/release/app-release.apk
+            frontend/android/app/build/outputs/apk/release/app-release.apk.sha256
+            frontend/android/app/build/outputs/bundle/release/app-release.aab
+            frontend/android/app/build/outputs/bundle/release/app-release.aab.sha256
+          if-no-files-found: error
+          retention-days: 30

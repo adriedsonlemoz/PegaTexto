@@ -16,6 +16,9 @@ test('extrai uma matéria HTML em blocos legíveis', async () => {
   assert.ok(result.content.some((block) => block.type === 'paragraph'))
   assert.ok(result.wordCount > 20)
   assert.ok(result.readingTimeMinutes >= 1)
+  assert.ok(result.images.some((image) => image.src === 'https://example.com/images/capa.jpg'))
+  assert.ok(result.images.some((image) => image.src === 'https://example.com/images/foto-1280.jpg'))
+  assert.ok(result.images.some((image) => image.src === 'https://example.com/images/foto-lazy.jpg'))
 })
 
 test('prioriza JSON-LD de Product e normaliza os dados do e-commerce', async () => {

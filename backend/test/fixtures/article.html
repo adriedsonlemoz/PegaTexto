@@ -1,12 +1,16 @@
 <!doctype html>
 <html lang="pt-BR">
-<head><title>Matéria de teste</title></head>
+<head><title>Matéria de teste</title><meta property="og:image" content="/images/capa.jpg"></head>
 <body>
   <article>
     <h1>Matéria de teste</h1>
     <p>Este é o primeiro parágrafo de uma matéria usada para validar a extração automatizada do conteúdo principal.</p>
     <p>Este segundo parágrafo contém texto suficiente para que o Readability identifique a página como um artigo real e útil.</p>
     <p>O objetivo é garantir que títulos, parágrafos e a contagem de palavras sejam preservados após a refatoração.</p>
+      <picture>
+      <source srcset="/images/foto-320.jpg 320w, /images/foto-1280.jpg 1280w">
+      <img data-src="/images/foto-lazy.jpg" alt="Foto da matéria">
+    </picture>
   </article>
 </body>
 </html>

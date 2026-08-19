@@ -39,7 +39,7 @@ if (!gradle.includes(signingApply)) {
 }
 
 await writeFile(buildGradle, gradle)
-console.log(`Android personalizado: recursos sem duplicação, ícone/splash aplicados, versão ${versionName} (${versionCode}).`)
+console.log(`Android personalizado: recursos sem duplicação, ícone aprovado/splash aplicados, versão ${versionName} (${versionCode}).`)
 
 async function removeGeneratedResourceConflicts() {
   const conflictingFiles = [
@@ -48,6 +48,8 @@ async function removeGeneratedResourceConflicts() {
     path.join(brandingTarget, 'drawable', 'splash.jpg'),
     path.join(brandingTarget, 'drawable', 'splash.jpeg'),
     path.join(brandingTarget, 'values', 'ic_launcher_background.xml'),
+    path.join(brandingTarget, 'mipmap-anydpi-v26', 'ic_launcher.xml'),
+    path.join(brandingTarget, 'mipmap-anydpi-v26', 'ic_launcher_round.xml'),
   ]
 
   await Promise.all(conflictingFiles.map((file) => rm(file, { force: true })))
@@ -65,6 +67,22 @@ async function validateBrandingResources() {
     try {
       await access(file)
       throw new Error(`Recurso Android duplicado detectado: ${path.basename(splashXml)} e ${path.basename(file)}`)
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+  }
+
+  const launcherSizes = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']
+  for (const density of launcherSizes) {
+    await access(path.join(brandingTarget, `mipmap-${density}`, 'ic_launcher.png'))
+    await access(path.join(brandingTarget, `mipmap-${density}`, 'ic_launcher_round.png'))
+  }
+
+  for (const adaptiveName of ['ic_launcher.xml', 'ic_launcher_round.xml']) {
+    const adaptivePath = path.join(brandingTarget, 'mipmap-anydpi-v26', adaptiveName)
+    try {
+      await access(adaptivePath)
+      throw new Error(`Adaptive icon antigo ainda ativo: ${adaptiveName}`)
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error
     }

@@ -91,6 +91,7 @@ async function extractViaJina(url) {
   const html = marked.parse(markdown)
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const { content, images } = blocksFromDocument(doc, url)
+  const pageImages = collectDocumentImages(doc, url)
   if (!content.length) throw new Error('EXTRACTION_FAILED')
 
   return finishArticle({
@@ -99,15 +100,16 @@ async function extractViaJina(url) {
     siteName: cleanText(data?.siteName) || new URL(url).hostname,
     excerpt: cleanText(data?.description) || null,
     content,
-    images,
+    images: mergeImages(images, pageImages),
   })
 }
 
 function extractFromHtml(html, url) {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const pageTitle = cleanText(doc.title) || 'Sem título'
+  const pageImages = collectDocumentImages(doc, url)
   const product = extractProductFromDocument(doc, url)
-  if (product) return buildProductArticle(product, url)
+  if (product) return buildProductArticle(product, url, pageImages)
 
   JUNK_SELECTORS.forEach((selector) => {
     try {
@@ -132,12 +134,12 @@ function extractFromHtml(html, url) {
         siteName: article.siteName || null,
         excerpt: article.excerpt || null,
         content,
-        images,
+        images: mergeImages(images, pageImages),
       })
     }
   }
 
-  return extractFallback(doc, url, pageTitle)
+  return extractFallback(doc, url, pageTitle, pageImages)
 }
 
 function extractProductFromDocument(doc, baseUrl) {
@@ -236,7 +238,7 @@ function extractProductFromDocument(doc, baseUrl) {
   }
 }
 
-function buildProductArticle(product, url) {
+function buildProductArticle(product, url, pageImages = []) {
   const details = []
   const formattedPrice = formatPrice(product.price, product.currency)
   if (formattedPrice) details.push(`Preço: ${formattedPrice}`)
@@ -261,13 +263,13 @@ function buildProductArticle(product, url) {
     siteName: new URL(url).hostname,
     excerpt: product.description,
     content,
-    images: product.images.map((src) => ({ src, alt: product.name })),
+    images: mergeImages(product.images.map((src) => ({ src, alt: product.name })), pageImages),
     type: 'product',
     product,
   })
 }
 
-function extractFallback(doc, url, pageTitle) {
+function extractFallback(doc, url, pageTitle, pageImages = []) {
   doc.querySelectorAll('nav, footer, header, aside, .menu, script, style, form').forEach((element) => element.remove())
   const content = []
   const marketItems = new Set()
@@ -301,7 +303,7 @@ function extractFallback(doc, url, pageTitle) {
     siteName: new URL(url).hostname,
     excerpt: null,
     content,
-    images: [],
+    images: pageImages,
   })
 }
 
@@ -376,13 +378,83 @@ function walkElement(element, content, images, baseUrl) {
 }
 
 function registerImage(image, images, content, baseUrl) {
-  const source = image.getAttribute('src') || image.getAttribute('data-src') || image.getAttribute('data-lazy-src')
-  if (!source) return
-  const src = resolveUrl(source, baseUrl)
-  const alt = cleanText(image.getAttribute('alt'))
+  const src = resolveImageUrl(imageSource(image), baseUrl)
+  if (!src) return
+  const alt = cleanText(image.getAttribute('alt') || image.getAttribute('title'))
   if (images.some((item) => item.src === src)) return
   images.push({ src, alt })
   content.push({ type: 'image', src, alt })
+}
+
+function collectDocumentImages(doc, baseUrl) {
+  const images = []
+  const add = (source, alt = '') => {
+    const src = resolveImageUrl(source, baseUrl)
+    if (!src || images.some((item) => item.src === src)) return
+    images.push({ src, alt: cleanText(alt) })
+  }
+  const title = cleanText(doc.title)
+  add(meta(doc, 'property', 'og:image'), title)
+  add(meta(doc, 'property', 'og:image:url'), title)
+  add(meta(doc, 'name', 'twitter:image'), title)
+  add(doc.querySelector('link[rel="image_src"]')?.getAttribute('href'), title)
+  doc.querySelectorAll('img').forEach((image) => {
+    const width = Number(image.getAttribute('width') || 0)
+    const height = Number(image.getAttribute('height') || 0)
+    if ((width > 0 && width <= 4) || (height > 0 && height <= 4)) return
+    const alt = image.getAttribute('alt') || image.getAttribute('title') || ''
+    add(imageSource(image), alt)
+    add(bestSrcsetSource(image.getAttribute('srcset') || image.getAttribute('data-srcset')), alt)
+  })
+  doc.querySelectorAll('picture source[srcset], source[data-srcset]').forEach((source) => add(bestSrcsetSource(source.getAttribute('srcset') || source.getAttribute('data-srcset')), ''))
+  doc.querySelectorAll('[style*="background"], [data-bg], [data-background], [data-background-image]').forEach((element) => {
+    const style = element.getAttribute('style') || ''
+    const match = style.match(/background(?:-image)?\s*:\s*url\(["']?([^"')]+)["']?\)/i)
+    add(match?.[1] || element.getAttribute('data-bg') || element.getAttribute('data-background') || element.getAttribute('data-background-image'), element.getAttribute('aria-label') || '')
+  })
+  return images.slice(0, 80)
+}
+
+function imageSource(image) {
+  return image?.getAttribute('src') || image?.getAttribute('data-src') || image?.getAttribute('data-lazy-src') || image?.getAttribute('data-original') || image?.getAttribute('data-image') || bestSrcsetSource(image?.getAttribute('srcset') || image?.getAttribute('data-srcset')) || ''
+}
+
+function bestSrcsetSource(value = '') {
+  const candidates = String(value).split(',').map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+    const parts = entry.split(/\s+/)
+    return { source: parts[0], score: Number.parseFloat(parts[1] || '') || 0 }
+  })
+  return candidates.sort((a, b) => b.score - a.score)[0]?.source || ''
+}
+
+function resolveImageUrl(source, baseUrl) {
+  if (!source || /^(data|blob|javascript):/i.test(String(source))) return ''
+  try {
+    const resolved = new URL(String(source).trim(), baseUrl)
+    if (!['http:', 'https:'].includes(resolved.protocol)) return ''
+    if (isPrivateImageHost(resolved.hostname)) return ''
+    if (/\b(pixel|spacer|tracking)(?:[._-]|$)/i.test(resolved.pathname)) return ''
+    return resolved.toString()
+  } catch { return '' }
+}
+
+function isPrivateImageHost(hostname = '') {
+  const host = String(hostname).toLowerCase().replace(/^\[|\]$/g, '')
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === '::1') return true
+  if (/^127\./.test(host) || /^10\./.test(host) || /^169\.254\./.test(host) || /^192\.168\./.test(host)) return true
+  const match = host.match(/^172\.(\d{1,3})\./)
+  return Boolean(match && Number(match[1]) >= 16 && Number(match[1]) <= 31)
+}
+
+function mergeImages(...groups) {
+  const merged = []
+  groups.flat().forEach((image) => {
+    const item = typeof image === 'string' ? { src: image, alt: '' } : image
+    const src = resolveImageUrl(item?.src, item?.src)
+    if (!src || merged.some((current) => current.src === src)) return
+    merged.push({ src, alt: cleanText(item?.alt) })
+  })
+  return merged.slice(0, 80)
 }
 
 function findProductJsonLd(doc) {

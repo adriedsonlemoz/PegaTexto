@@ -29,8 +29,9 @@ export async function extractArticle(url) {
 
 export function extractArticleFromHtml(html, url) {
   const raw$ = cheerio.load(html);
+  const pageImages = collectPageImages(raw$, url);
   const product = extractProduct(raw$, url);
-  if (product) return buildProductArticle(product, url);
+  if (product) return buildProductArticle(product, url, pageImages);
 
   const dom = new JSDOM(html, { url });
   const doc = dom.window.document;
@@ -61,12 +62,12 @@ export function extractArticleFromHtml(html, url) {
         siteName: article.siteName || null,
         excerpt: article.excerpt || null,
         content,
-        images,
+        images: mergeImages(images, pageImages),
       });
     }
   }
 
-  return extractFallback(html, url, pageTitle);
+  return extractFallback(html, url, pageTitle, pageImages);
 }
 
 function extractCloudData(data, url) {
@@ -78,6 +79,7 @@ function extractCloudData(data, url) {
   const content = [];
   const images = [];
   $('body').children().each((_, element) => walk($, element, content, images, url));
+  const pageImages = collectPageImages($, url);
   if (!content.length) throw new Error('EXTRACTION_FAILED');
 
   return finishArticle({
@@ -86,7 +88,7 @@ function extractCloudData(data, url) {
     siteName: cleanText(data?.siteName) || new URL(url).hostname,
     excerpt: cleanText(data?.description) || null,
     content,
-    images,
+    images: mergeImages(images, pageImages),
   });
 }
 
@@ -183,7 +185,7 @@ function extractProduct($, baseUrl) {
   };
 }
 
-function buildProductArticle(product, url) {
+function buildProductArticle(product, url, pageImages = []) {
   const details = [];
   const formattedPrice = formatPrice(product.price, product.currency);
   if (formattedPrice) details.push(`Preço: ${formattedPrice}`);
@@ -209,13 +211,13 @@ function buildProductArticle(product, url) {
     siteName: new URL(url).hostname,
     excerpt: product.description,
     content,
-    images: product.images.map((src) => ({ src, alt: product.name })),
+    images: mergeImages(product.images.map((src) => ({ src, alt: product.name })), pageImages),
     type: 'product',
     product,
   });
 }
 
-function extractFallback(html, url, pageTitle) {
+function extractFallback(html, url, pageTitle, pageImages = []) {
   const $ = cheerio.load(html);
   $('nav, footer, header, aside, .menu, script, style, form').remove();
   const content = [];
@@ -250,7 +252,7 @@ function extractFallback(html, url, pageTitle) {
     siteName: new URL(url).hostname,
     excerpt: null,
     content,
-    images: [],
+    images: pageImages,
   });
 }
 
@@ -324,13 +326,88 @@ function walk($, element, content, images, baseUrl) {
 }
 
 function registerImage($, imageElement, images, content, baseUrl) {
-  const source = $(imageElement).attr('src') || $(imageElement).attr('data-src') || $(imageElement).attr('data-lazy-src');
-  if (!source) return;
-  const src = resolveUrl(source, baseUrl);
-  if (images.some((item) => item.src === src)) return;
-  const alt = cleanText($(imageElement).attr('alt'));
+  const node = $(imageElement);
+  const src = resolveImageUrl(imageSourceFromNode(node), baseUrl);
+  if (!src || images.some((item) => item.src === src)) return;
+  const alt = cleanText(node.attr('alt') || node.attr('title'));
   images.push({ src, alt });
   content.push({ type: 'image', src, alt });
+}
+
+function collectPageImages($, baseUrl) {
+  const images = [];
+  const add = (source, alt = '') => {
+    const src = resolveImageUrl(source, baseUrl);
+    if (!src || images.some((item) => item.src === src)) return;
+    images.push({ src, alt: cleanText(alt) });
+  };
+  const title = cleanText($('title').first().text());
+  add(metaContent($, 'property', 'og:image'), title);
+  add(metaContent($, 'property', 'og:image:url'), title);
+  add(metaContent($, 'name', 'twitter:image'), title);
+  add($('link[rel="image_src"]').first().attr('href'), title);
+  $('img').each((_, element) => {
+    const node = $(element);
+    const width = Number(node.attr('width') || 0);
+    const height = Number(node.attr('height') || 0);
+    if ((width > 0 && width <= 4) || (height > 0 && height <= 4)) return;
+    const alt = node.attr('alt') || node.attr('title') || '';
+    add(imageSourceFromNode(node), alt);
+    add(bestSrcsetSource(node.attr('srcset') || node.attr('data-srcset')), alt);
+  });
+  $('picture source[srcset], source[data-srcset]').each((_, element) => {
+    const node = $(element);
+    add(bestSrcsetSource(node.attr('srcset') || node.attr('data-srcset')), '');
+  });
+  $('[style*="background"], [data-bg], [data-background], [data-background-image]').each((_, element) => {
+    const node = $(element);
+    const style = node.attr('style') || '';
+    const match = style.match(/background(?:-image)?\s*:\s*url\(["']?([^"')]+)["']?\)/i);
+    add(match?.[1] || node.attr('data-bg') || node.attr('data-background') || node.attr('data-background-image'), node.attr('aria-label') || '');
+  });
+  return images.slice(0, 80);
+}
+
+function imageSourceFromNode(node) {
+  return node.attr('src') || node.attr('data-src') || node.attr('data-lazy-src') || node.attr('data-original') || node.attr('data-image') || bestSrcsetSource(node.attr('srcset') || node.attr('data-srcset')) || '';
+}
+
+function bestSrcsetSource(value = '') {
+  const candidates = String(value).split(',').map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+    const parts = entry.split(/\s+/);
+    return { source: parts[0], score: Number.parseFloat(parts[1] || '') || 0 };
+  });
+  return candidates.sort((a, b) => b.score - a.score)[0]?.source || '';
+}
+
+function resolveImageUrl(source, baseUrl) {
+  if (!source || /^(data|blob|javascript):/i.test(String(source))) return '';
+  try {
+    const resolved = new URL(String(source).trim(), baseUrl);
+    if (!['http:', 'https:'].includes(resolved.protocol)) return '';
+    if (isPrivateImageHost(resolved.hostname)) return '';
+    if (/\b(pixel|spacer|tracking)(?:[._-]|$)/i.test(resolved.pathname)) return '';
+    return resolved.toString();
+  } catch { return ''; }
+}
+
+function isPrivateImageHost(hostname = '') {
+  const host = String(hostname).toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === '::1') return true;
+  if (/^127\./.test(host) || /^10\./.test(host) || /^169\.254\./.test(host) || /^192\.168\./.test(host)) return true;
+  const match = host.match(/^172\.(\d{1,3})\./);
+  return Boolean(match && Number(match[1]) >= 16 && Number(match[1]) <= 31);
+}
+
+function mergeImages(...groups) {
+  const merged = [];
+  groups.flat().forEach((image) => {
+    const item = typeof image === 'string' ? { src: image, alt: '' } : image;
+    const src = resolveImageUrl(item?.src, item?.src);
+    if (!src || merged.some((current) => current.src === src)) return;
+    merged.push({ src, alt: cleanText(item?.alt) });
+  });
+  return merged.slice(0, 80);
 }
 
 function findProductJsonLd($) {

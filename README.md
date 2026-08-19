@@ -2,7 +2,7 @@
 
 Ferramenta para extrair o conteúdo principal de matérias, páginas e produtos, removendo menus, anúncios e outros ruídos. A interface usa **React + Vite** e pode ser executada no navegador ou como aplicativo Android com **Capacitor**.
 
-Versão atual: **1.2.1**.
+Versão atual: **1.2.3**.
 
 ## Como funciona
 
@@ -126,7 +126,7 @@ Consulte [docs/ANDROID_SIGNING.md](docs/ANDROID_SIGNING.md) para criar a chave e
 - `ANDROID_KEY_ALIAS`;
 - `ANDROID_KEY_PASSWORD`.
 
-O workflow pode ser executado manualmente ou por tags `v*`, como `v1.2.1`.
+O workflow pode ser executado manualmente ou por tags `v*`, como `v1.2.3`.
 
 ## Branding Android
 
@@ -151,3 +151,10 @@ No APK essa variável não é necessária para a extração normal.
 ## Segurança
 
 A API rejeita URLs inválidas, credenciais embutidas, localhost, IPs privados e redirecionamentos para destinos privados antes de fazer requisições. Também limita o tamanho das páginas processadas para reduzir abuso e consumo excessivo de memória.
+
+
+## Extração de imagens
+
+O botão **Extrair imagens** procura imagens no HTML completo, incluindo `src`, atributos de lazy-load, `srcset`, `picture/source`, Open Graph e Twitter Card. Os resultados aparecem em uma galeria separada com opção de abrir o original, copiar um link ou copiar todos os links.
+
+O launcher Android usa diretamente o ícone quadrado arredondado aprovado em `frontend/resources/icon.png`, convertido para todas as densidades `mipmap-*`.

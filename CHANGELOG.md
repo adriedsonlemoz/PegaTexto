@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.2.3
+
+- integra no APK o ícone quadrado arredondado aprovado, sem gerar uma nova arte;
+- usa o mesmo PNG aprovado em todas as densidades Android e remove o adaptive icon antigo para evitar divergência no launcher;
+- adiciona o botão **Extrair imagens**;
+- coleta imagens da página completa por `src`, lazy-load, `srcset`, `picture/source`, Open Graph e Twitter Card;
+- adiciona galeria com abertura da imagem original e cópia individual ou em lote dos links;
+- elimina URLs duplicadas, protocolos não públicos e pixels de rastreamento óbvios;
+- adiciona testes para Open Graph, lazy-load e `srcset`.
+
+## 1.2.2
+
+- Corrige falha `:app:mergeDebugResources` causada por recursos Android duplicados no branding.
+- Remove o `splash.png` padrão antes de aplicar `splash.xml` personalizado.
+- Remove a definição padrão duplicada de `ic_launcher_background` antes de aplicar as cores do app.
+- Adiciona validação preventiva de conflitos de recursos antes do Gradle.
+- Atualiza as actions do GitHub para runtimes Node 24 atuais.
+
 ## 1.2.1
 
 - corrige o carregamento da configuração do Capacitor 8 em projeto ESM;
@@ -20,11 +38,3 @@
 - sincroniza `versionName` e `versionCode` com `frontend/package.json`;
 - adiciona workflow de APK/AAB release assinados com GitHub Secrets;
 - adiciona checksums SHA-256 dos releases.
-
-## 1.2.2
-
-- Corrige falha `:app:mergeDebugResources` causada por recursos Android duplicados no branding.
-- Remove o `splash.png` padrão antes de aplicar `splash.xml` personalizado.
-- Remove a definição padrão duplicada de `ic_launcher_background` antes de aplicar as cores do app.
-- Adiciona validação preventiva de conflitos de recursos antes do Gradle.
-- Atualiza as actions do GitHub para runtimes Node 24 atuais.

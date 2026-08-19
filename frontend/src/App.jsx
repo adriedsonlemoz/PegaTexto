@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { extractArticle } from './lib/api'
 import { readClipboardText, writeClipboardText } from './lib/clipboard'
 import ReaderView from './components/ReaderView'
+import ImageGallery from './components/ImageGallery'
 
 const STATUS = { IDLE: 'idle', LOADING: 'loading', DONE: 'done', ERROR: 'error' }
 
@@ -11,6 +12,7 @@ export default function App() {
   const [article, setArticle] = useState(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [showImages, setShowImages] = useState(false)
+  const [showImageGallery, setShowImageGallery] = useState(false)
   const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
   const [copied, setCopied] = useState(false)
   const inputRef = useRef(null)
@@ -19,16 +21,18 @@ export default function App() {
     document.documentElement.classList.toggle('dark', dark)
   }, [dark])
 
-  const handleExtract = useCallback(async (e) => {
-    if (e) e.preventDefault()
+  const runExtraction = useCallback(async ({ openImages = false } = {}) => {
     if (!url.trim()) return
     setStatus(STATUS.LOADING)
     setArticle(null)
     setErrorMessage('')
+    setShowImageGallery(openImages)
     try {
       const data = await extractArticle(url.trim())
       setArticle(data)
       setStatus(STATUS.DONE)
+      setShowImageGallery(openImages)
+      if (openImages) setShowImages(false)
     } catch (err) {
       setStatus(STATUS.ERROR)
       let msg = err.message;
@@ -63,6 +67,13 @@ export default function App() {
       setErrorMessage(msg)
     }
   }, [url])
+
+  const handleExtract = (e) => {
+    e.preventDefault()
+    runExtraction()
+  }
+
+  const handleExtractImages = () => runExtraction({ openImages: true })
 
   const handleCopyAll = useCallback(async () => {
     if (!article) return
@@ -101,6 +112,8 @@ export default function App() {
     setUrl('')
     setArticle(null)
     setStatus(STATUS.IDLE)
+    setShowImageGallery(false)
+    setShowImages(false)
     inputRef.current?.focus()
   }
 
@@ -154,13 +167,14 @@ export default function App() {
               </button>
             </div>
           </div>
-          <button
-            type="submit"
-            disabled={status === STATUS.LOADING || !url.trim()}
-            className="w-full py-3 mt-1 rounded-md bg-accent hover:bg-accent-bright dark:bg-accent-bright dark:hover:bg-accent text-white font-mono text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
-          >
-            {status === STATUS.LOADING ? 'extraindo conteúdo…' : 'Extrair conteúdo'}
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+            <button type="submit" disabled={status === STATUS.LOADING || !url.trim()} className="w-full py-3 rounded-md bg-accent hover:bg-accent-bright dark:bg-accent-bright dark:hover:bg-accent text-white font-mono text-sm font-medium transition-colors disabled:opacity-50 whitespace-nowrap">
+              {status === STATUS.LOADING ? 'extraindo…' : 'Extrair conteúdo'}
+            </button>
+            <button type="button" onClick={handleExtractImages} disabled={status === STATUS.LOADING || !url.trim()} className="w-full py-3 rounded-md border border-accent/40 dark:border-accent-bright/40 text-accent dark:text-accent-bright font-mono text-sm font-medium hover:bg-accent/5 dark:hover:bg-accent-bright/5 transition-colors disabled:opacity-50 whitespace-nowrap">
+              Extrair imagens
+            </button>
+          </div>
         </form>
         {status === STATUS.LOADING && (
           <div className="font-mono text-xs text-ink-soft dark:text-white/50 animate-pulse">
@@ -175,19 +189,18 @@ export default function App() {
         )}
         {status === STATUS.DONE && article && (
           <>
-            <div className="flex items-center justify-between mb-4 font-mono text-xs text-ink-soft dark:text-white/50">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 font-mono text-xs text-ink-soft dark:text-white/50">
               <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={showImages}
-                  onChange={(e) => setShowImages(e.target.checked)}
-                  className="accent-accent dark:accent-accent-bright"
-                />
-                mostrar imagens
+                <input type="checkbox" checked={showImages} onChange={(e) => setShowImages(e.target.checked)} className="accent-accent dark:accent-accent-bright" />
+                mostrar imagens no texto
               </label>
-              <span>{article.readingTimeMinutes} min de leitura</span>
+              <span>{article.images?.length || 0} imagens · {article.readingTimeMinutes} min de leitura</span>
             </div>
             <ReaderView article={article} showImages={showImages} />
+            <button type="button" onClick={() => setShowImageGallery((value) => !value)} className="mt-7 w-full py-3 rounded-md font-mono text-xs font-semibold tracking-wide border border-accent/30 dark:border-accent-bright/30 text-accent dark:text-accent-bright hover:bg-accent/5 dark:hover:bg-accent-bright/5 transition-colors">
+              {showImageGallery ? 'OCULTAR IMAGENS EXTRAÍDAS' : `VER IMAGENS EXTRAÍDAS (${article.images?.length || 0})`}
+            </button>
+            {showImageGallery && <ImageGallery images={article.images || []} />}
             <button
               onClick={handleCopyAll}
               className="mt-10 w-full py-3 rounded-md font-mono text-xs font-semibold tracking-wide border border-ink/20 dark:border-white/20 hover:bg-ink hover:text-paper dark:hover:bg-white dark:hover:text-ink transition-colors"

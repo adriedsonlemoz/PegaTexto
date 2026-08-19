@@ -2,14 +2,18 @@
 
 Ferramenta para extrair o conteúdo principal de matérias, páginas e produtos, removendo menus, anúncios e outros ruídos. A interface usa **React + Vite** e pode ser executada no navegador ou como aplicativo Android com **Capacitor**.
 
-Versão atual: **1.2.3**.
+Versão atual: **1.3.0**.
 
 ## Como funciona
 
 - **Web:** o frontend usa o backend Express em `/api` ou em `VITE_API_URL`.
 - **Android/APK:** o aplicativo usa HTTP nativo do Capacitor e processa o conteúdo diretamente no aparelho; o backend não é obrigatório.
+- **Classificação automática:** cada URL é tratada como **Produto**, **Artigo** ou **Página** antes da apresentação final.
 - **Artigos:** Mozilla Readability identifica o conteúdo principal.
-- **Produtos:** a extração prioriza Schema.org/JSON-LD, Open Graph e metadados estáveis antes de recorrer a seletores visuais.
+- **Produtos:** a extração prioriza Schema.org/JSON-LD, Open Graph e depois filtros específicos por site.
+- **Shopee:** filtra navegação, categorias, recomendações e cabeçalhos genéricos, buscando os dados do produto.
+- **Mercado Livre e Amazon:** possuem extratores próprios para os campos mais relevantes do produto.
+- **Qualidade/fallback:** cada resultado recebe uma nota. Resultados fracos fazem o app tentar a segunda estratégia de extração e escolher a melhor.
 - **Páginas difíceis:** há fallback via `r.jina.ai` para páginas dinâmicas ou bloqueadas para leitura direta.
 
 ## Estrutura
@@ -126,7 +130,7 @@ Consulte [docs/ANDROID_SIGNING.md](docs/ANDROID_SIGNING.md) para criar a chave e
 - `ANDROID_KEY_ALIAS`;
 - `ANDROID_KEY_PASSWORD`.
 
-O workflow pode ser executado manualmente ou por tags `v*`, como `v1.2.3`.
+O workflow pode ser executado manualmente ou por tags `v*`, como `v1.3.0`.
 
 ## Branding Android
 
@@ -158,3 +162,39 @@ A API rejeita URLs inválidas, credenciais embutidas, localhost, IPs privados e 
 O botão **Extrair imagens** procura imagens no HTML completo, incluindo `src`, atributos de lazy-load, `srcset`, `picture/source`, Open Graph e Twitter Card. Os resultados aparecem em uma galeria separada com opção de abrir o original, copiar um link ou copiar todos os links.
 
 O launcher Android usa diretamente o ícone quadrado arredondado aprovado em `frontend/resources/icon.png`, convertido para todas as densidades `mipmap-*`.
+
+## Modo produto
+
+Quando uma URL é identificada como produto, o app não usa a tela de leitura de artigos. Ele mostra:
+
+- galeria principal com miniaturas;
+- preço atual, preço anterior e desconto quando disponíveis;
+- avaliação, quantidade de avaliações e vendidos;
+- vendedor, entrega e disponibilidade;
+- opções/variações;
+- descrição limpa;
+- características técnicas;
+- nota de qualidade da extração.
+
+As imagens principais são separadas das imagens extras da página. Logos, ícones, banners, avatares e pixels de rastreamento são descartados da galeria do produto.
+
+## Pipeline de extração
+
+```text
+URL
+  ↓
+detectar site
+  ↓
+classificar Produto / Artigo / Página
+  ↓
+extrator específico (Shopee / Mercado Livre / Amazon)
+  ↓
+metadados estruturados e heurísticas genéricas
+  ↓
+limpeza + ranking de imagens
+  ↓
+nota de qualidade
+  ↓
+resultado bom → exibir
+resultado fraco → tentar fallback e escolher o melhor
+```

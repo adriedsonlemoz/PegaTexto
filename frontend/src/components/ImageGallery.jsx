@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { writeClipboardText } from '../lib/clipboard'
 
-export default function ImageGallery({ images = [] }) {
+export default function ImageGallery({ images = [], title = 'Imagens extraídas' }) {
   const [copied, setCopied] = useState('')
   const safeImages = useMemo(() => {
     const seen = new Set()
@@ -32,7 +32,7 @@ export default function ImageGallery({ images = [] }) {
     <section aria-label="Imagens extraídas" className="mt-5">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <h2 className="font-mono text-sm font-semibold">Imagens extraídas</h2>
+          <h2 className="font-mono text-sm font-semibold">{title}</h2>
           <p className="mt-1 font-mono text-[11px] text-ink-soft dark:text-white/45">{safeImages.length} {safeImages.length === 1 ? 'imagem encontrada' : 'imagens encontradas'} na página</p>
         </div>
         <button type="button" onClick={() => copyText(safeImages.map((image) => image.src).join('\n'), 'all')} className="shrink-0 rounded-md border border-ink/15 dark:border-white/15 px-3 py-2 font-mono text-[10px] font-semibold hover:bg-ink/5 dark:hover:bg-white/5">{copied === 'all' ? 'LINKS COPIADOS ✓' : 'COPIAR LINKS'}</button>

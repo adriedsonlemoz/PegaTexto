@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0
+
+- adiciona classificador automático de página: **Produto**, **Artigo** ou **Página**;
+- adiciona filtro específico da **Shopee**, rejeitando cabeçalhos, menus, categorias, recomendações e textos institucionais como conteúdo do produto;
+- adiciona extratores específicos para **Mercado Livre** e **Amazon**;
+- estrutura produtos em título, preço, preço anterior, desconto, avaliação, vendas, vendedor, entrega, estoque, marca, SKU, opções, características e descrição;
+- cria uma tela exclusiva para produtos, sem usar o leitor de artigos;
+- reorganiza imagens do produto em galeria principal com miniaturas e separa imagens extras da página;
+- adiciona ranking de imagens por domínio/CDN e remove logos, ícones, banners e pixels de rastreamento da galeria principal;
+- adiciona sistema de qualidade da extração com nota, nível e avisos;
+- quando a primeira estratégia produz resultado fraco, tenta a segunda estratégia (direta/Jina) e mantém o melhor resultado;
+- melhora o botão de cópia para produtos, copiando dados estruturados em vez de texto bruto da página;
+- amplia testes do frontend para classificação, limpeza, preço e qualidade e adiciona fixtures de Shopee, Mercado Livre e Amazon ao backend.
+
 ## 1.2.3
 
 - integra no APK o ícone quadrado arredondado aprovado, sem gerar uma nova arte;

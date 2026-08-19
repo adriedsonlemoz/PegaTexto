@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { extractArticle } from './lib/api'
 import { readClipboardText, writeClipboardText } from './lib/clipboard'
 import ReaderView from './components/ReaderView'
+import ProductView from './components/ProductView'
 import ImageGallery from './components/ImageGallery'
 
 const STATUS = { IDLE: 'idle', LOADING: 'loading', DONE: 'done', ERROR: 'error' }
@@ -61,6 +62,8 @@ export default function App() {
         msg = 'Esse link não aponta para uma página HTML compatível.';
       } else if (msg === 'TOO_MANY_REDIRECTS') {
         msg = 'A página redirecionou vezes demais e a extração foi interrompida.';
+      } else if (msg === 'PRODUCT_NOT_RECOGNIZED') {
+        msg = 'A página parece ser de um produto, mas não foi possível confirmar dados suficientes. Tente novamente; o app evita mostrar menus e recomendações como se fossem o produto.';
       } else if (msg.includes('Timeout') || msg.includes('timeout')) {
         msg = 'Tempo limite excedido. O site demorou muito para responder.';
       }
@@ -77,15 +80,41 @@ export default function App() {
 
   const handleCopyAll = useCallback(async () => {
     if (!article) return
-    const lines = [article.title, '']
-    article.content.forEach((block) => {
-      if (block.type === 'heading' || block.type === 'paragraph') lines.push(block.text, '')
-      else if (block.type === 'quote') lines.push(`"${block.text}"`, '')
-      else if (block.type === 'list') {
-        block.items.forEach((item, i) => lines.push(`${block.ordered ? `${i + 1}.` : '-'} ${item}`))
-        lines.push('')
+    const lines = []
+    if (article.type === 'product' && article.product) {
+      const product = article.product
+      lines.push(product.name || article.title, '')
+      if (product.price) lines.push(`Preço: ${formatCopyPrice(product.price, product.currency)}`)
+      if (product.originalPrice) lines.push(`Preço anterior: ${formatCopyPrice(product.originalPrice, product.currency)}`)
+      if (product.discount) lines.push(`Desconto: ${product.discount}`)
+      if (product.rating) lines.push(`Avaliação: ${product.rating}${product.reviewCount ? ` (${product.reviewCount})` : ''}`)
+      if (product.soldCount) lines.push(`Vendidos: ${product.soldCount}`)
+      if (product.seller) lines.push(`Vendedor: ${product.seller}`)
+      if (product.shipping) lines.push(`Entrega: ${product.shipping}`)
+      if (product.availability) lines.push(`Disponibilidade: ${product.availability}`)
+      if (product.brand) lines.push(`Marca: ${product.brand}`)
+      if (product.sku) lines.push(`SKU: ${product.sku}`)
+      if (product.variations?.length) {
+        lines.push('', 'Opções:')
+        product.variations.forEach((group) => lines.push(`${group.name}: ${group.options.join(' | ')}`))
       }
-    })
+      if (product.attributes?.length) {
+        lines.push('', 'Características:')
+        product.attributes.forEach((item) => lines.push(`${item.name}: ${item.value}`))
+      }
+      if (product.description) lines.push('', 'Descrição:', product.description)
+      if (product.images?.length) lines.push('', 'Imagens:', ...product.images)
+    } else {
+      lines.push(article.title, '')
+      article.content.forEach((block) => {
+        if (block.type === 'heading' || block.type === 'paragraph') lines.push(block.text, '')
+        else if (block.type === 'quote') lines.push(`"${block.text}"`, '')
+        else if (block.type === 'list') {
+          block.items.forEach((item, i) => lines.push(`${block.ordered ? `${i + 1}.` : '-'} ${item}`))
+          lines.push('')
+        }
+      })
+    }
     try {
       await writeClipboardText(lines.join('\n').trim())
       setCopied(true)
@@ -189,23 +218,38 @@ export default function App() {
         )}
         {status === STATUS.DONE && article && (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 font-mono text-xs text-ink-soft dark:text-white/50">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={showImages} onChange={(e) => setShowImages(e.target.checked)} className="accent-accent dark:accent-accent-bright" />
-                mostrar imagens no texto
-              </label>
-              <span>{article.images?.length || 0} imagens · {article.readingTimeMinutes} min de leitura</span>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 font-mono text-xs text-ink-soft dark:text-white/50">
+              {article.type === 'product' ? (
+                <span>{article.product?.siteLabel || article.siteName} · Produto · {article.quality?.label || 'extração estruturada'}</span>
+              ) : (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span>{article.type === 'article' ? 'Artigo' : 'Página'} · {article.quality?.label || 'extração concluída'}</span>
+                  <label className="flex cursor-pointer select-none items-center gap-2">
+                    <input type="checkbox" checked={showImages} onChange={(e) => setShowImages(e.target.checked)} className="accent-accent dark:accent-accent-bright" />
+                    imagens no texto
+                  </label>
+                </div>
+              )}
+              <span>{article.type === 'product' ? `${article.product?.images?.length || 0} imagens do produto` : article.type === 'article' ? `${article.images?.length || 0} imagens · ${article.readingTimeMinutes} min de leitura` : `${article.images?.length || 0} imagens`}</span>
             </div>
-            <ReaderView article={article} showImages={showImages} />
-            <button type="button" onClick={() => setShowImageGallery((value) => !value)} className="mt-7 w-full py-3 rounded-md font-mono text-xs font-semibold tracking-wide border border-accent/30 dark:border-accent-bright/30 text-accent dark:text-accent-bright hover:bg-accent/5 dark:hover:bg-accent-bright/5 transition-colors">
-              {showImageGallery ? 'OCULTAR IMAGENS EXTRAÍDAS' : `VER IMAGENS EXTRAÍDAS (${article.images?.length || 0})`}
-            </button>
-            {showImageGallery && <ImageGallery images={article.images || []} />}
-            <button
-              onClick={handleCopyAll}
-              className="mt-10 w-full py-3 rounded-md font-mono text-xs font-semibold tracking-wide border border-ink/20 dark:border-white/20 hover:bg-ink hover:text-paper dark:hover:bg-white dark:hover:text-ink transition-colors"
-            >
-              {copied ? 'COPIADO ✓' : 'COPIAR TUDO'}
+
+            {article.type === 'product' ? <ProductView article={article} /> : <ReaderView article={article} showImages={showImages} />}
+
+            {(() => {
+              const galleryImages = article.type === 'product' ? (article.extraImages || []) : (article.images || [])
+              if (!galleryImages.length && article.type === 'product') return null
+              return (
+                <>
+                  <button type="button" onClick={() => setShowImageGallery((value) => !value)} className="mt-7 w-full rounded-md border border-accent/30 py-3 font-mono text-xs font-semibold tracking-wide text-accent transition-colors hover:bg-accent/5 dark:border-accent-bright/30 dark:text-accent-bright dark:hover:bg-accent-bright/5">
+                    {showImageGallery ? 'OCULTAR GALERIA EXTRA' : article.type === 'product' ? `VER OUTRAS IMAGENS DA PÁGINA (${galleryImages.length})` : `VER IMAGENS EXTRAÍDAS (${galleryImages.length})`}
+                  </button>
+                  {showImageGallery && <ImageGallery images={galleryImages} title={article.type === 'product' ? 'Outras imagens da página' : 'Imagens extraídas'} />}
+                </>
+              )
+            })()}
+
+            <button onClick={handleCopyAll} className="mt-10 w-full rounded-md border border-ink/20 py-3 font-mono text-xs font-semibold tracking-wide transition-colors hover:bg-ink hover:text-paper dark:border-white/20 dark:hover:bg-white dark:hover:text-ink">
+              {copied ? 'COPIADO ✓' : article.type === 'product' ? 'COPIAR DADOS DO PRODUTO' : 'COPIAR TUDO'}
             </button>
           </>
         )}
@@ -213,3 +257,5 @@ export default function App() {
     </div>
   )
 }
+
+function formatCopyPrice(price, currency) { const symbols = { BRL: 'R$', USD: 'US$', EUR: '€', GBP: '£' }; const prefix = symbols[String(currency || '').toUpperCase()] || currency || ''; return `${prefix}${prefix ? ' ' : ''}${price}`.trim() }

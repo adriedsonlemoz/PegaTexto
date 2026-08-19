@@ -53,3 +53,26 @@ export function getWordCount(content = []) {
 export function readingTimeMinutes(wordCount) {
   return Math.max(1, Math.round(Number(wordCount || 0) / 200))
 }
+
+export function scoreContentQuality(article = {}) {
+  const content = Array.isArray(article.content) ? article.content : []
+  const wordCount = getWordCount(content)
+  const paragraphs = content.filter((block) => block?.type === 'paragraph' && cleanText(block.text).length >= 40).length
+  const headings = content.filter((block) => block?.type === 'heading').length
+  let score = 0
+  const signals = []
+  const add = (ok, points, label) => { if (ok) { score += points; signals.push(label) } }
+  add(Boolean(cleanText(article.title) && !/^sem título$/i.test(cleanText(article.title))), 20, 'título')
+  add(wordCount >= 80, 15, 'texto')
+  add(wordCount >= 250, 15, 'conteúdo suficiente')
+  add(wordCount >= 600, 10, 'conteúdo extenso')
+  add(paragraphs >= 3, 15, 'parágrafos')
+  add(headings >= 1, 8, 'estrutura')
+  add(Boolean(article.excerpt), 5, 'resumo')
+  add(Boolean(article.byline || article.siteName), 5, 'origem')
+  add(Array.isArray(article.images) && article.images.length > 0, 7, 'imagens')
+  score = Math.min(100, score)
+  const level = score >= 70 ? 'high' : score >= 45 ? 'medium' : 'partial'
+  const label = level === 'high' ? 'extração completa' : level === 'medium' ? 'extração boa' : 'extração parcial'
+  return { score, level, label, signals, warnings: level === 'partial' ? ['conteúdo pode estar incompleto'] : [] }
+}

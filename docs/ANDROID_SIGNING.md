@@ -59,8 +59,8 @@ Você pode usar **Actions → Android Signed Release → Run workflow**.
 Outra opção é criar uma tag:
 
 ```bash
-git tag v1.2.1
-git push origin v1.2.1
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 No fim da execução, o artifact `pega-texto-signed-release` conterá APK, AAB e checksums.
@@ -69,7 +69,7 @@ No fim da execução, o artifact `pega-texto-signed-release` conterá APK, AAB e
 
 O script `frontend/scripts/apply-android-customizations.mjs` lê a versão do `frontend/package.json` e aplica automaticamente:
 
-- `versionName`: por exemplo `1.2.1`;
+- `versionName`: por exemplo `1.3.0`;
 - `versionCode`: por exemplo `10201`.
 
 Isso evita esquecer de atualizar a versão nativa depois de alterar a versão do frontend.

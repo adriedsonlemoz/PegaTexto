@@ -7,6 +7,7 @@ import {
   looksLikeChallenge,
   normalizeHttpUrl,
   readingTimeMinutes,
+  scoreContentQuality,
 } from '../src/lib/extractionCore.js'
 
 test('normaliza URLs http/https e rejeita protocolos inseguros', () => {
@@ -37,4 +38,16 @@ test('conta palavras de blocos de texto e listas', () => {
   assert.equal(readingTimeMinutes(10), 1)
   assert.equal(readingTimeMinutes(450), 2)
   assert.equal(cleanText('  um   texto\nlimpo  '), 'um texto limpo')
+})
+
+
+test('avalia a qualidade de artigos para decidir fallback', () => {
+  const result = scoreContentQuality({ title: 'Matéria completa', byline: 'Autor', content: [
+    { type: 'heading', text: 'Subtítulo' },
+    { type: 'paragraph', text: 'Este é um parágrafo suficientemente longo para representar conteúdo real e legível de uma matéria.' },
+    { type: 'paragraph', text: 'Outro parágrafo com informações adicionais para melhorar a avaliação automática da extração.' },
+    { type: 'paragraph', text: 'Terceiro parágrafo com contexto, detalhes e uma estrutura de leitura adequada para o usuário.' },
+  ], images: [{ src: 'https://example.com/a.jpg' }] })
+  assert.ok(result.score >= 45)
+  assert.notEqual(result.level, 'partial')
 })
